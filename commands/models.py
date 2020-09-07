@@ -1,5 +1,3 @@
-import io
-
 import paramiko
 from django.db import models
 
@@ -12,6 +10,7 @@ class Command(models.Model):
     command = models.TextField(blank=True, null=True)
     action = models.TextField(blank=True, null=True)
     status = models.BooleanField(default=False)
+    output = models.TextField(default="", blank=True, null=True)
 
     def run_command(self):
         if not self.check_machine():
@@ -19,9 +18,12 @@ class Command(models.Model):
             return self.status
 
         ssh_client = self.init_ssh_conn()
-        ssh_client.exec_command(self.command)
+        _, stdout, stderr = ssh_client.exec_command(self.command)
+        self.output = "".join(stdout.readlines()) if stdout else "".join(stderr.readlines())
+
         _, stdout, _ = ssh_client.exec_command("echo $?")
-        self.status = self.check_status(stdout)
+        self.status = self.check_status(stdout.readlines())
+        self.save()
 
     def init_ssh_conn(self):
         ssh_client = paramiko.SSHClient()
@@ -40,4 +42,4 @@ class Command(models.Model):
 
     @staticmethod
     def check_status(returncode):
-        return False if returncode != "0" else True
+        return False if returncode[0] != "0\n" else True
